@@ -39,10 +39,12 @@ class Animator(object):
 
     def step(self):
         cur_value = _animate_tween(self.start_val, self.end_val, self.time, self.duration)
-        setattr(self.obj, self.property_name, cur_value)
         self.time += self.step_time
         if self.time < self.duration:
+            setattr(self.obj, self.property_name, cur_value)
             wx.CallLater(self.step_time, self.step)
+        else:
+            setattr(self.obj, self.property_name, self.end_val)
 
 
 def animate(obj, property_name, from_val=None, to=None, over_ms=None, return_after_ms=None, frame_time=10):
