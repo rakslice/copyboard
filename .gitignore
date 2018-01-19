@@ -1,0 +1,5 @@
+*.iml
+*.bak
+*.pyc
+copystrings.json
+.idea/
