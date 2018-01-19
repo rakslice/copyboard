@@ -3,12 +3,7 @@ import os
 
 import wx
 
-from copyboard_gui_autogen import MainView
-
-
-def wx_button_label_escape(text):
-    #XX TODO
-    return text
+import copyboard_gui_autogen
 
 
 def _animate_tween(start_val, end_val, time, duration):
@@ -64,7 +59,81 @@ def animate(obj, property_name, from_val=None, to=None, over_ms=None, return_aft
     ani.step()
 
 
-class MainViewImpl(MainView):
+class EditViewImpl(copyboard_gui_autogen.EditView):
+    def __init__(self, *args, **kwargs):
+        super(EditViewImpl, self).__init__(*args, **kwargs)
+        self.close_callback = None
+        self.last_loaded_obj = None
+        self.copy_strings_list = None
+        self.text_edits = None
+        """:type: list of wx.TextCtrl"""
+
+        self.Bind(wx.EVT_CLOSE, self.on_close)
+
+    def init_with_settings(self, last_loaded_obj):
+        self.last_loaded_obj = last_loaded_obj
+        self.copy_strings_list = last_loaded_obj["strings"]
+        self._create_edits()
+
+    def set_close_callback(self, callback):
+        self.close_callback = callback
+
+    def on_close(self, event):
+        event.Veto()
+        self._cancel()
+
+    def _add_edit(self, initial_text):
+        cur_text_edit = wx.TextCtrl(self.panel_editors, wx.ID_ANY, initial_text)
+        self.sizer_editors.Add(cur_text_edit, 0, wx.EXPAND, 0)
+        self.text_edits.append(cur_text_edit)
+
+    def _create_edits(self):
+        self.text_edits = []
+        for copy_string in self.copy_strings_list:
+            self._add_edit(copy_string)
+
+    def _clear_edits(self):
+        for edit in self.text_edits:
+            self.sizer_editors.Detach(edit)
+            edit.Destroy()
+        self.text_edits = []
+
+    def button_ok_click(self, event):
+        new_texts = []
+        for text_edit in self.text_edits:
+            new_texts.append(text_edit.Value)
+        self.last_loaded_obj["strings"][:] = new_texts
+        if self.close_callback is not None:
+            self.close_callback(True)
+
+    def _cancel(self):
+        self._clear_edits()
+        self._create_edits()
+        self.Layout()
+        if self.close_callback is not None:
+            self.close_callback(False)
+
+    def button_cancel_click(self, event):
+        self._cancel()
+
+    def button_add_click(self, event):
+        self._add_edit("")
+        self.button_remove.Enable()
+        self.Layout()
+
+    def button_remove_click(self, event):
+        if len(self.text_edits) > 0:
+            last = self.text_edits[-1]
+            assert isinstance(last, wx.TextCtrl)
+            self.text_edits = self.text_edits[:-1]
+            self.sizer_editors.Detach(last)
+            last.Destroy()
+            if len(self.text_edits) < 1:
+                self.button_remove.Disable()
+            self.Layout()
+
+
+class MainViewImpl(copyboard_gui_autogen.MainView):
     def __init__(self, *args, **kwargs):
         super(MainViewImpl, self).__init__(*args, **kwargs)
         self.copy_strings_list = None
@@ -74,8 +143,15 @@ class MainViewImpl(MainView):
         self.last_clipboard_obj = None
         self.Bind(wx.EVT_CLOSE, self.on_close)
 
+        self.editor_window = EditViewImpl(None)
+        self.editor_window.set_close_callback(self.on_editor_close)
+
+    # noinspection PyUnusedLocal
     def on_close(self, event):
         self.save_geometry_settings(self.last_loaded_obj)
+        edit = self.editor_window
+        self.editor_window = None
+        edit.Destroy()
         self.Destroy()
 
     def init_with_settings(self, last_loaded_obj):
@@ -85,6 +161,8 @@ class MainViewImpl(MainView):
 
         self.copy_strings_list = last_loaded_obj["strings"]
         self._create_buttons()
+        self.Layout()
+        self.editor_window.init_with_settings(last_loaded_obj)
 
     def load_geometry_settings(self, settings):
         position = settings.get("position")
@@ -107,20 +185,22 @@ class MainViewImpl(MainView):
         for i, copy_string in enumerate(self.copy_strings_list):
             button_id = self.NewControlId()
             self.id_index_map[button_id] = i
-            cur_copy_button = wx.Button(self.panel_copybuttons, button_id, copy_string)
+            button_label = wx.Button.EscapeMnemonics(copy_string)
+            cur_copy_button = wx.Button(self.panel_copybuttons, button_id, button_label)
             # item, proportion, flag, boarder
             self.sizer_copybuttons.Add(cur_copy_button, 0, wx.EXPAND, 0)
             self.Bind(wx.EVT_BUTTON, self._copy_button_click, cur_copy_button)
-        # self.sizer_copybuttons.Fit(self)
-        # self.Layout()
 
     def _clear_buttons(self):
         buttons = list(self.sizer_copybuttons.GetChildren())
-        for button in buttons:
+        for entry in buttons:
+            assert isinstance(entry, wx.SizerItem)
+            button = entry.Window
             assert isinstance(button, wx.Button)
             del self.id_index_map[button.GetId()]
             self.Unbind(wx.EVT_BUTTON, handler=self._copy_button_click, source=button)
-            self.sizer_copybuttons.Remove(button)
+            self.sizer_copybuttons.Detach(button)
+            button.Destroy()
 
     def _copy_button_click(self, event):
         """:type event: wx.CommandEvent"""
@@ -141,7 +221,22 @@ class MainViewImpl(MainView):
             clipboard.SetData(self.last_clipboard_obj)
 
     def button_edit_click(self, event):
-        pass
+        self.Hide()
+        self.editor_window.Size = self.Size
+        self.editor_window.Move(self.Position)
+        self.editor_window.Show()
+
+    def on_editor_close(self, updated):
+        """:type updated: bool"""
+        if updated:
+            self._clear_buttons()
+            self._create_buttons()
+            self.Layout()
+
+        self.editor_window.Hide()
+        self.Move(self.editor_window.Position)
+        self.Size = self.editor_window.Size
+        self.Show()
 
 
 class AppLogic(object):
