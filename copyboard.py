@@ -69,6 +69,12 @@ class EditViewImpl(copyboard_gui_autogen.EditView):
         self.copy_strings_list = None
         self.text_edits = None
         """:type: list of wx.TextCtrl"""
+        self.remove_button_ids = None
+        """:type: list of int"""
+        self.text_edit_sizers = None
+        """:type: list of wx.BoxSizer"""
+        self.text_edit_remove_buttons = None
+        """:type: list of wx.Button"""
 
         self.Bind(wx.EVT_CLOSE, self.on_close)
 
@@ -85,20 +91,66 @@ class EditViewImpl(copyboard_gui_autogen.EditView):
         self._cancel()
 
     def _add_edit(self, initial_text):
+        row_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        # wx.BoxSizer.Add parameters: proportion, flag, border
+        self.sizer_editors.Add(row_sizer, 0, wx.EXPAND, 0)
+        self.text_edit_sizers.append(row_sizer)
+
         cur_text_edit = wx.TextCtrl(self.panel_editors, wx.ID_ANY, initial_text)
-        self.sizer_editors.Add(cur_text_edit, 0, wx.EXPAND, 0)
         self.text_edits.append(cur_text_edit)
+
+        row_sizer.Add(cur_text_edit, 1, 0, 0)
+
+        remove_button_id = self.NewControlId()
+        self.remove_button_ids.append(remove_button_id)
+        remove_button = wx.Button(self.panel_editors, remove_button_id, "&Remove")
+        self.text_edit_remove_buttons.append(remove_button)
+
+        row_sizer.Add(remove_button, 0, 0, 0)
+
+        self.Bind(wx.EVT_BUTTON, self._row_remove_button_click, remove_button)
 
     def _create_edits(self):
         self.text_edits = []
+        self.text_edit_remove_buttons = []
+        self.text_edit_sizers = []
+        self.remove_button_ids = []
         for copy_string in self.copy_strings_list:
             self._add_edit(copy_string)
 
+    def _cleanup_edit(self, edit, remove_button, sizer):
+        """
+        :type edit: wx.TextCtrl
+        :type sizer: wx.BoxSizer
+        :type remove_button: wx.Button
+        """
+        sizer.Detach(edit)
+        edit.Destroy()
+        sizer.Detach(remove_button)
+
+        self.Unbind(event=wx.EVT_BUTTON, handler=self._row_remove_button_click, source=remove_button)
+
+        remove_button.Destroy()
+        self.sizer_editors.Detach(sizer)
+        sizer.Destroy()
+
     def _clear_edits(self):
-        for edit in self.text_edits:
-            self.sizer_editors.Detach(edit)
-            edit.Destroy()
+        for edit, remove_button, sizer in zip(self.text_edits, self.text_edit_remove_buttons, self.text_edit_sizers):
+            self._cleanup_edit(edit, remove_button, sizer)
         self.text_edits = []
+        self.text_edit_remove_buttons = []
+        self.text_edit_sizers = []
+        self.remove_button_ids = []
+
+    def _row_remove_button_click(self, event):
+        index = self.remove_button_ids.index(event.GetId())
+        self.remove_button_ids.pop(index)
+        text_edit = self.text_edits.pop(index)
+        remove_button = self.text_edit_remove_buttons.pop(index)
+        sizer = self.text_edit_sizers.pop(index)
+        self._cleanup_edit(text_edit, remove_button, sizer)
+
+        self.Layout()
 
     def button_ok_click(self, event):
         new_texts = []
@@ -120,19 +172,7 @@ class EditViewImpl(copyboard_gui_autogen.EditView):
 
     def button_add_click(self, event):
         self._add_edit("")
-        self.button_remove.Enable()
         self.Layout()
-
-    def button_remove_click(self, event):
-        if len(self.text_edits) > 0:
-            last = self.text_edits[-1]
-            assert isinstance(last, wx.TextCtrl)
-            self.text_edits = self.text_edits[:-1]
-            self.sizer_editors.Detach(last)
-            last.Destroy()
-            if len(self.text_edits) < 1:
-                self.button_remove.Disable()
-            self.Layout()
 
 
 class MainViewImpl(copyboard_gui_autogen.MainView):
