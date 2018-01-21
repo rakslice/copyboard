@@ -188,7 +188,7 @@ class MainViewImpl(copyboard_gui_autogen.MainView):
             button_id = self.NewControlId()
             self.id_index_map[button_id] = i
             button_label = wx.Button.EscapeMnemonics(copy_string)
-            cur_copy_button = wx.Button(self.panel_copybuttons, button_id, button_label)
+            cur_copy_button = wx.Button(self.panel_copybuttons, button_id, button_label, style=wx.BU_LEFT)
             # item, proportion, flag, boarder
             self.sizer_copybuttons.Add(cur_copy_button, 0, wx.EXPAND, 0)
             self.Bind(wx.EVT_BUTTON, self._copy_button_click, cur_copy_button)
